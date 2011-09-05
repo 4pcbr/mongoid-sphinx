@@ -21,8 +21,12 @@ module Mongoid
       cattr_accessor :search_attributes
       cattr_accessor :index_options
       cattr_accessor :sphinx_index
+      
+      field :_sphinx_id, :type => Integer
+      index :_sphinx_id, :unique => true, :background => true
     end
     
+
     module ClassMethods
       
       def search_index(options={})
@@ -65,24 +69,28 @@ module Mongoid
         end
         puts '</sphinx:schema>'
         
+        # get a current timestamp as sphinx_id base
+        base = Time.now.to_i
         self.all.entries.each do |document|
-          sphinx_compatible_id = document['_id'].to_s.to_i - 100000000000000000000000
+          sphinx_compatible_id = base
+          base += 1
           if sphinx_compatible_id > 0
+            document.update_attribute(:_sphinx_id, sphinx_compatible_id)
             puts "<sphinx:document id=\"#{sphinx_compatible_id}\">"
             
             puts "<classname>#{self.to_s}</classname>"
             self.search_fields.each do |key|
               if document.respond_to?(key.to_sym)
-                if document[key.to_s].is_a?(Array)
-                  puts "<#{key}><![CDATA[[#{document[key.to_s].join(", ")}]]></#{key}>"
-                elsif document[key.to_s].is_a?(Hash)
+                if document.send(key.to_s).is_a?(Array)
+                  puts "<#{key}><![CDATA[[#{document.send(key.to_s).join(", ")}]]></#{key}>"
+                elsif document.send(key.to_s).is_a?(Hash)
                   entries = []
-                  document[key.to_s].to_a.each do |entry|
+                  document.send(key.to_s).to_a.each do |entry|
                     entries << entry.join(" : ")
                   end
                   puts "<#{key}><![CDATA[[#{entries.join(", ")}]]></#{key}>"
                 else
-                  puts "<#{key}><![CDATA[[#{document[key.to_s]}]]></#{key}>"
+                  puts "<#{key}><![CDATA[[#{document.send(key.to_s)}]]></#{key}>"
                 end
               end
             end
@@ -90,22 +98,21 @@ module Mongoid
               if document.respond_to?(key.to_sym)
                 value = case value
                   when 'bool' 
-                    document[key.to_s] ? 1 : 0
+                    document.send(key.to_s) ? 1 : 0
                   when 'timestamp'
-                    document[key.to_s].is_a?(Date) ? document[key.to_s].to_time.to_i : document[key.to_s].to_i
+                    document.send(key.to_s).is_a?(Date) ? document.send(key.to_s).to_time.to_i : document.send(key.to_s).to_i
                   else 
-                    if document[key.to_s].is_a?(Array)
-                      document[key.to_s].join(", ")
-                    elsif document[key.to_s].is_a?(Hash)
+                    if document.send(key.to_s).is_a?(Array)
+                      document.send(key.to_s).join(", ")
+                    elsif document.send(key.to_s).is_a?(Hash)
                       entries = []
-                      document[key.to_s].to_a.each do |entry|                    
+                      document.send(key.to_s).to_a.each do |entry|                    
                         entries << entry.join(" : ")
                       end
                       entries.join(", ")
                     else
-                      document[key.to_s].to_s
+                      document.send(key.to_s).to_s
                     end
-                  end
                 end 
                 puts "<#{key}>#{value}</#{key}>"
               end
@@ -145,12 +152,9 @@ module Mongoid
         result = client.query("#{query} @classname #{self.to_s}")
         
         if result and result[:status] == 0 and (matches = result[:matches])
-          ids = matches.collect do |row|
-            (100000000000000000000000 + row[:doc]).to_s rescue nil
-          end.compact
-          
+          ids = matches.map{ |row| row[:doc] }.compact
           return ids if options[:raw] or ids.empty?
-          return self.find(ids)
+          return self.where(:_sphinx_id.in => ids)
         else
           return []
         end
@@ -175,20 +179,12 @@ module Mongoid
       result = client.query("* @classname #{self.to_s}")
       
       if result and result[:status] == 0 and (matches = result[:matches])
-        ids = matches.collect do |row|
-          (100000000000000000000000 + row[:doc]).to_s rescue nil
-        end.compact
-        
+        ids = matches.collect { |row| row[:doc] }.compact
         return ids if options[:raw] or ids.empty?
-        return self.find(ids)
+        return self.where(:_sphinx_id.in => ids)
       else
         return false
       end
-    end    
-    
-    private
-    def sphinx_id
-      self._id.to_s.to_i - 100000000000000000000000
     end
   end
 end
