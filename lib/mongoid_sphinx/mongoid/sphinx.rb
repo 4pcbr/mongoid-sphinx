@@ -105,7 +105,6 @@ module Mongoid
                     else
                       document[key.to_s].to_s
                     end
-                  end
                 end 
                 puts "<#{key}>#{value}</#{key}>"
               end
