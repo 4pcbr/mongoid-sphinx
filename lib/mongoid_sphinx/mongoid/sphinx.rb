@@ -33,6 +33,9 @@ module Mongoid
         self.search_fields = options[:fields]
         self.search_attributes = {}
         self.index_options = options[:options] || {}
+        
+        raise "You should provide attributes options for search to proceed." if options[:attributes].nil?
+        
         options[:attributes].each do |attrib|
           self.search_attributes[attrib] = SPHINX_TYPE_MAPPING[self.fields[attrib.to_s].type.to_s] || 'str2ordinal'
         end
@@ -137,15 +140,12 @@ module Mongoid
           client.sort_by = options[:sort_by]
         end
         
-        if options.key?(:with)
-          options[:with].each do |key, value|
-            client.filters << Riddle::Client::Filter.new(key.to_s, value.is_a?(Range) ? value : value.to_a, false)
-          end
-        end
-        
-        if options.key?(:without)
-          options[:without].each do |key, value|
-            client.filters << Riddle::Client::Filter.new(key.to_s, value.is_a?(Range) ? value : value.to_a, true)
+        %w(with without).each do |opt|
+          opt = opt.to_sym
+          if options.key?(opt)
+            options[opt].each do |key, value|
+              client.filters << Riddle::Client::Filter.new(key.to_s, value.is_a?(Range) ? value : value.to_a, true)
+            end
           end
         end
         
@@ -153,15 +153,16 @@ module Mongoid
         
         if result and result[:status] == 0 and (matches = result[:matches])
           ids = matches.map{ |row| row[:doc] }.compact
-          return ids if options[:raw] or ids.empty?
-          return self.where(:_sphinx_id.in => ids)
-        else
-          return []
         end
+        
+        self.where(:_sphinx_id.in => (ids || []))
       end
     end
     
     def search_ids(id_range, options = {})
+      
+      raise "REWRITE ME!!!"
+      
       client = MongoidSphinx::Configuration.instance.client
       
       if id_range.is_a?(Range)
