@@ -61,11 +61,11 @@ module MongoidSphinx
     def build(file_path=nil)
       file_path ||= "#{self.config_file}"
       
-      @configuration.indexes.clear
+      @configuration.indices.clear
       
       MongoidSphinx.context.indexed_models.each do |model|
         model = model.constantize
-        @configuration.indexes.concat model.to_riddle
+        @configuration.indices.concat model.to_riddle
       end
       
       open(file_path, "w") do |file|

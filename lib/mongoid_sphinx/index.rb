@@ -65,7 +65,7 @@ module MongoidSphinx
     
     def to_riddle_for_distributed
       index = Riddle::Configuration::DistributedIndex.new name
-      index.local_indexes << core_name
+      index.local_indices << core_name
       index
     end
     
